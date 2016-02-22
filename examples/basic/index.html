@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<link rel="stylesheet" type="text/css" href="../lib/crm-grid.css">
+	</head>
+	<body>
+		<!--Tell angular which module to use as the main app and pass the sample controller-->
+		<div data-ng-app="sampleApp" data-ng-controller="SampleController" id = "grid" style="height: 500px;">
+			<!--Create the grid-->
+			<div style="width:90%;height:400px;position:relative;"
+                 data-crm-grid=""
+                 data-crm-grid-selection=""
+                 data-options="gridOptions">
+            </div>
+		</div>
+
+		<script type="text/javascript" src="angular.js"></script>
+		<script type="text/javascript" src="SampleJsonGenerator.js"></script>
+		<script type="text/javascript" src="../lib/crm-grid.js"></script>
+
+		<script type="text/javascript">
+		var sampleApp = angular.module('sampleApp', ['sampleControllers', 'crm.grid']);
+		var sampleControllers = angular.module('sampleControllers', []);
+		var numOfRows = 100000;
+		sampleControllers.controller('SampleController', ['$scope', function($scope){
+			$scope.toggleRowSelection = function(row){
+				$scope.gridApi.selection.toggleRowSelection(row);
+			};
+
+			$scope.updateRow = function(row){
+				row.data = sampleApi.getRandomRow(row.data.id);
+			};
+
+			// Add an update link to the first column
+			sampleApi.getFields()[0].template = '<div><a href="javascript:void(0);" data-crm-grid-handle-click="" data-ng-click="appScope.updateRow(row)">Update</a>\t<span>{{getCellData()}}</span></div>';
+			$scope.gridOptions = {
+	            data: sampleApi.getRandomRows(numOfRows),
+	            rowHeight: 40, // The height for each row
+	            colWidth: 120, // The default column width
+	            rowTemplate: '<div>{{row.data.firstname}}</div>',
+	            rowCellTemplate: undefined,
+	            rowKey: 'id',
+	            selection: {
+	                singleClickClear: true
+	            },
+	            onRegister: function (api) {
+	                $scope.gridApi = api;
+	            },
+	            minWidth: 400,
+	            enableSelection: true,
+	            cellFormatter: undefined,
+	            rowDataFormatter: undefined,
+	            fixedCols: [
+	                {
+	                    label: '',
+	                    size: 30,
+	                    template: '<input tabindex="-1" data-ng-if="appScope.gridApi.selection.isRowSelected(row)" checked="checked" type="checkbox" data-crm-grid-handle-click="" data-ng-click="appScope.toggleRowSelection(row);"/>' +
+	                      '<input tabindex="-1" data-ng-if="!appScope.gridApi.selection.isRowSelected(row)" type="checkbox" data-crm-grid-handle-click="" data-ng-click="appScope.toggleRowSelection(row);"/>'
+	                }
+	            ],
+	            showCols: true,
+	            fields: sampleApi.getFields(),
+	            onColumnResizeDone: function () {}
+	        };
+		}]);
+		</script>
+	</body>
+</html>
