@@ -2342,10 +2342,8 @@
 
                         // If the block does not exist yet, create it
                         if(!resultBlock){
-                            // TODO: Remove random
-                            //var randomAdj = (Math.floor(Math.random() * 55 )) + 1);
                             var randomAdj = 0;
-                            resultBlock = new CrmGridBlock({data: opts.data, size: (gridOpts.blockOptions.rows.size + randomAdj) || gridOpts.rowHeight, minSize: gridOpts.minSize, hashKey: hashKey, parent: parent, dataFormatter: gridOpts.dataFormatter, type: 'row', index: opts.index});
+                            resultBlock = new CrmGridBlock({data: opts.data, size: gridOpts.blockOptions.rows.size || gridOpts.rowHeight, minSize: gridOpts.minSize, hashKey: hashKey, parent: parent, dataFormatter: gridOpts.dataFormatter, type: 'row', index: opts.index});
                         }
                         else{
                             resultBlock.removeContainerData();
@@ -2897,6 +2895,7 @@
                   
                     // Add the setFixedCols method to the api
                     scope.api.grid.setFixedCols = function (cols) {
+                    	viewWindowFixedCols = scope.viewWindowFixedCols = undefined;
                         if (cols) {
                             // Set the new col data, make a new col window, and make a new copy of the blocks from the block manager
                             scope.fixedColManager.setChildData(cols);
@@ -2917,7 +2916,7 @@
                     // Get the width of all fixed columns combined. This also considers the columns visibility when calculating
                     scope.api.grid.getFixedColsWidth = function () {
                         var fixedColWidth = 0;
-                        if (viewWindowFixedCols.getBlocks() && viewWindowFixedCols.getBlocks().length > 0 && scope.api.grid.isColumnsVisible()) {
+                        if (viewWindowFixedCols && viewWindowFixedCols.getBlocks() && viewWindowFixedCols.getBlocks().length > 0 && scope.api.grid.isColumnsVisible()) {
                             fixedColWidth = viewWindowFixedCols.getContentSize();
                         }
                         return fixedColWidth;
@@ -3061,12 +3060,9 @@
                             scope.viewWindowRows.updateHeaders();
                         }
 
-                        var isUpdatedY = false;
-                        var isUpdatedX = false;
-
                         if (scope.viewWindowRows) {
                             //isUpdatedY = viewWindowRows.updateRenderData();
-                            isUpdatedY = scope.viewWindowRows.updateRenderData(true);
+                            scope.viewWindowRows.updateRenderData(true);
 
                             // Moves the fixed columns rows with the vertical scroller
                             if (scope.options.fixedCols && scope.options.fixedCols) {
@@ -3076,12 +3072,9 @@
 
                         // Check the columns if they are loaded
                         if (scope.hasRenderCols()) {
-                            isUpdatedX = scope.viewWindowCols.updateRenderData(true);
-
-                            if (isUpdatedX) {
-                                // update the header container based on the scroll position
-                                scope.viewWindowCols.updateHeaders();
-                            }
+                            scope.viewWindowCols.updateRenderData(true);
+                            // update the header container based on the scroll position
+                            scope.viewWindowCols.updateHeaders();
                         }
                         scope.$digest();
                     });
@@ -3477,10 +3470,10 @@
                     return {
                         blockOptions: {
                             rows: {
-                                size: 35
+                                size: undefined
                             },
                             cols: {
-                                size: 35
+                                size: undefined
                             },
                         },
                         sort: false
@@ -3499,9 +3492,11 @@
                 $scope.options.sort = returnSourceOrDefault($scope.options, def, 'sort');
                 var doSortAction;
                 var onAfterSortClick;
+                var onBeforeSortClick;
                 if (typeof $scope.options.sort == 'object') {
                     doSortAction = $scope.options.sort.doSortAction;
                     onAfterSortClick = $scope.options.sort.onAfterSortClick;
+                    onBeforeSortClick = $scope.options.sort.onBeforeSortClick;
                 }
                 this.options = $scope.options;
 
@@ -3751,7 +3746,7 @@
                                 }
                             }
 
-                            return found;
+                            return found || {by: val, dir: ''};
                         },
                         getSortDirByField: function(val){
                             var obj = this.getSortByField(val);
@@ -3949,21 +3944,28 @@
                     var sortObj = $scope.getSortByField(val);
                     var defaultSortDir = 'asc';
 
-                    // Toggle the field is already sorted
-                    if (sortObj) {
-                        if (sortObj.dir == 'asc') {
-                            sortObj.dir = 'desc';
-                        }
-                    }
-                    else if($scope.api.grid.getFieldByName(val)){ // Otherwise sort and default it to ascending
-                        sortObj = {by: val, dir: defaultSortDir};
+                    // An event that occurs before the click logic is executed
+                    if (onBeforeSortClick) {
+                        onBeforeSortClick($scope.api, { by: sortObj.by, dir: sortObj.dir });
                     }
 
+                    // If the sort object has no direction are is descending toggle to ascending
+                    if (sortObj.dir == '' || sortObj.dir == 'desc') {
+                        sortObj.dir = defaultSortDir;
+                    }
+                    else { // Otherwise toggle to descending
+                        sortObj.dir = 'desc'
+                    }
+
+                    // If the sort object is present complete the sort
                     if (sortObj) {
-                        $scope.api.grid.sort([sortObj]);
-                        if (onAfterSortClick) {
-                            onAfterSortClick($scope.api, {by: sortObj.by, dir: sortObj.dir});
-                        }
+                    	// Timeout needed to prevent the ui thread from being blocked. This will queue the sort so any rendering can happen first.
+                    	$timeout(function(){
+                    		$scope.api.grid.sort([sortObj]);
+	                        if (onAfterSortClick) {
+	                            onAfterSortClick($scope.api, {by: sortObj.by, dir: sortObj.dir});
+	                        }
+                    	});
                     }
                 };
 
@@ -5208,18 +5210,27 @@
     var headerLabelHtml = '<span data-ng-if="!col.data.label">&nbsp;</span>' +
         '<label data-ng-if="col.data.label !== undefined && col.data.label != \'\'">{{col.data.label}}</label>';
 
+    // 64 bit encoding for the grid's sort icons
+    var sortBothBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABMAAAATCAYAAAByUDbMAAAAAXNSR0IArs4c6QAAAAZiS0dEAAAAAAAA+UO7fwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB+ACDAQdO6PocB4AAADHSURBVDjLrZQxCoUwEER3JGBj5wUs0wje/wqiCDZ2yQXsbATN/O6jYjRGF1JsWGbfspOApHwVSUgRAzsmIUJN04hzjq/FrLUiItK27TuyZVk4juM/n+eZ0WJd1+3yvu/jyHwU0zTxsZiPYhgG73aTp923SzkGvjStOrs0xuy2eAyttWRZhqAxi6K4JDgT8ooBgNb6VKgsy+fW8HVP0xRRpj1SVFUV/5y2FHmei1IKd7/C5VnXlXVd0znHu9ogn5EkANzVfWraHxMuj5hftBuoAAAAAElFTkSuQmCC';
+    var sortDescBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABMAAAATCAYAAAByUDbMAAAAAXNSR0IArs4c6QAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB+ACDA8EKccER68AAACfSURBVDjLY/z//z8DtQATAxXBqGGjhtHDMBZsgqfOMvyXWamFQwsjw8eUqwyaagyMRLnM2ICBgZERh1GM/7EahNMwZmYGxg/J17Aaxlx6jfQw01RjYER3HSMjA4OYCAMjWRGA7greumvkx6aYCAPjNa+rDAwMDAxPwq8x8HDjdhVRScPGgpGBkRESKYQAIzGF458/DP9ZWPC7imjDiAUAPq8fon2YZQ0AAAAASUVORK5CYII=';
+    var sortAscBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABMAAAATCAYAAAByUDbMAAAAAXNSR0IArs4c6QAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB+ACDA8GFkNUCBAAAACVSURBVDjLY/z//z8DtQATMYr+/GH4TxXD/v5l+L9y/X+GHz8IG0jQsLMXGBicTmswHDnxnzKXffnK8F92pToDAwMDg/Y2DYZXb/C7Dq9hJ06j6t138D95Lnv1huG/9jYNFDH7kxoM12/hdh1Ow/51qWMVF5yjzvD3L3YDsRp2/RYDztT3Hxop2AAj3RPtqGGjhg0mwwAdSzb6KsXOlwAAAABJRU5ErkJggg==';
+    var base64Image = 'data:image/png;base64'
+
     var sortOffSets = 4;
     var sortConStyle = 'right: ' + sortOffSets + 'px;top: 5px;width: 12px;height: 16px;position: absolute;'; // The styling for the sort images container
     var sortClickStyle = 'cursor:pointer;position:absolute;width: 100%;height: 100%;top: 0px;left: -3px;z-index:1;'; // The styling for sort header click zone
     var sortAction = 'doSingleSort(col.data.value)'; // The header click action
-    var ngShowNoSort = 'getSortByField(col.data.value) === undefined'; // The show expression for the no sort image
+    var ngShowNoSort = "getSortByField(col.data.value).dir == ''"; // The show expression for the no sort image
     var ngShowSortAsc = "getSortDirByField(col.data.value) == 'asc'"; // The show expression for the ascending sort image
     var ngShowSortDesc = "getSortDirByField(col.data.value) == 'desc'"; // The show expression for the descending sort image
     var sortHeaderTemplate = [
     '<div class="single-line-text" data-ng-if="isSortEnabled() && isColumnSortEnabled(col)">',
         '<div data-ng-click="' + sortAction + '" style="' + sortClickStyle + '"></div>',
         headerLabelHtml,
-        '<div style="' + sortConStyle + '">' + getSortImage("images/sort_both_dark.png", 0, ngShowNoSort) + getSortImage("images/sort_desc_orange.png", 0, ngShowSortDesc) + getSortImage("images/sort_asc_orange.png", 0, ngShowSortAsc) + '</div>',
+        '<div style="' + sortConStyle + '">' +
+        getSortImage(base64Image + ',' + sortBothBase64, 0, ngShowNoSort) +
+        getSortImage(base64Image + ',' + sortDescBase64, 0, ngShowSortDesc) +
+        getSortImage(base64Image + ',' + sortAscBase64, 0, ngShowSortAsc) + '</div>',
     '</div>'
     ].join('');
 
@@ -5543,12 +5554,12 @@
 
             // Base the data on the value formatter if it is available otherwise use the normal value
             if (getValue) {
-                dataA = getValue(fieldname, rowA[fieldname]);
-                dataB = getValue(fieldname, rowB[fieldname]);
+                dataA = getValue(fieldName, rowA[fieldName]);
+                dataB = getValue(fieldName, rowB[fieldName]);
             }
             else {
-                dataA = rowA[fieldname];
-                dataB = rowB[fieldname];
+                dataA = rowA[fieldName];
+                dataB = rowB[fieldName];
             }
 
             // Get the sort value based on the comparison
