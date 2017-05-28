@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<link rel="stylesheet" type="text/css" href="../../src/crm-grid.css">
+		<style>
+			.hide{
+				display: none !important;
+			}
+			.loader{
+				position: absolute;
+			    width: 90%;
+			    height: 100%;
+			    z-index: 4;
+			    display: block;
+			}
+
+			.loader .loader-background{
+				background: gray;
+			    opacity: .5;
+			    height: 100%;
+			    z-index: 4;
+			    position: absolute;
+			    width: 100%;
+			}
+
+			.loader .loader-text{
+				margin: auto;
+			    width: 60px;
+			    padding: 10px;
+			    z-index: 5;
+			    position: relative;
+			    top: 50%;
+			    background: white;
+			    border: gray solid 1px;
+			    border-radius: 4px;
+			    font-size: 18px;
+			    display: block;
+			}
+		</style>
+	</head>
+	<body>
+		<!--Tell angular which module to use as the main app and pass the sample controller-->
+		<div data-ng-app="sampleApp" data-ng-controller="SampleController" id = "grid" style="position:relative;">
+			<!--The loader-->
+			<div class="loader hide">
+				<div class="loader-background">
+				</div>
+				<div class="loader-text">
+  					Sorting..
+ 				</div>
+			</div>
+			<!--Create the grid-->
+			<div style="width:90%;height:400px;position:relative;"
+                 data-crm-grid="gridOptions"
+                 data-crm-grid-selection="">
+            </div>
+		</div>
+
+		<script type="text/javascript" src="../shared/angular.js"></script>
+		<script type="text/javascript" src="../shared/SampleJsonGenerator.js"></script>
+		<script type="text/javascript" src="../../src/crm-grid.js"></script>
+
+		<script type="text/javascript">
+		// The ui loader
+		var loaderEl = document.getElementsByClassName('loader');
+		var sampleApp = angular.module('sampleApp', ['sampleControllers', 'crm.grid']);
+		var sampleControllers = angular.module('sampleControllers', []);
+		var numOfRows = 100000;
+		sampleControllers.controller('SampleController', ['$scope', function($scope){
+			$scope.toggleRowSelection = function(row){
+				$scope.gridApi.selection.toggleRowSelection(row);
+			};
+
+			$scope.updateRow = function(row){
+				row.data = sampleApi.getRandomRow(row.data.id);
+			};
+
+			// Add an update link to the first column
+			$scope.gridOptions = {
+	            data: sampleApi.getRandomRows(numOfRows),
+	            rowHeight: 40, // The height for each row
+	            colWidth: 120, // The default column width
+	            sort: {
+	            	onBeforeSortClick: function(){
+	            		loaderEl[0].className = 'loader';
+	            	},
+	            	onAfterSortClick: function(){
+	            		loaderEl[0].className = 'loader hide';
+	            	}
+	            },
+	            rowCellTemplate: undefined,
+	            rowKey: 'id',
+	            selection: {
+	                singleClickClear: true
+	            },
+	            onRegister: function (api) {
+	                $scope.gridApi = api;
+	            },
+	            minWidth: 400,
+	            enableSelection: true,
+	            cellFormatter: undefined,
+	            rowDataFormatter: undefined,
+	            showCols: true,
+	            fields: sampleApi.getFields(),
+	            onColumnResizeDone: function () {}
+	        };
+		}]);
+		</script>
+	</body>
+</html>
